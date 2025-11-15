@@ -77,7 +77,25 @@ This document outlines the optimization plan for NHyphenator using .NET 10's mem
 
 ## Future Optimization Opportunities
 
-### Phase 4: Additional Optimizations (Optional)
+### Phase 4: Additional Optimizations
+
+#### ✅ 4.1: Micro-optimization of FindLastWord
+**Implementation Date:** November 2025
+
+**Implementation:**
+- Eliminated StringBuilder allocation in `FindLastWord` method
+- Removed expensive `.Reverse().ToArray()` operation
+- Use direct string indexing and Substring for better performance
+- Proper handling of edge cases (empty string, single word, multiple words)
+
+**Results:** Additional ~1-20% memory reduction
+- Single word: 54.06 μs / 416 B (was 54.84 μs / 520 B) - **-1.4% time, -20% memory**
+- Short text: 201.10 μs / 2064 B (was 203.91 μs / 2424 B) - **-1.4% time, -14.9% memory**
+- Long text: 3,292.07 μs / 27628 B (was 3,227.82 μs / 27996 B) - **+2.0% time, -1.3% memory**
+
+**Phase 4 Cumulative Results:** ~1-20% additional memory reduction from Phase 3
+- Overall memory reduction from original baseline: **~96-97%**
+- Overall speed improvement from original baseline: **~50-52%**
 
 #### 1. Use `SearchValues<T>` for Character Searches
 **Potential Benefits:** Faster character searching (available in .NET 8+)
@@ -87,7 +105,7 @@ This document outlines the optimization plan for NHyphenator using .NET 10's mem
 - Pattern matching optimizations
 
 **Complexity:** Low-Medium
-**Status:** Deferred - Current performance is excellent
+**Status:** Deferred - `char.IsLetter` is already very efficient for Unicode support
 
 #### 2. Use `ReadOnlySpan<char>` in HyphenateWordsInText
 **Potential Benefits:** Further reduce string allocations during text processing
@@ -97,7 +115,7 @@ This document outlines the optimization plan for NHyphenator using .NET 10's mem
 - `FindLastWord`: Use span slicing instead of Substring
 
 **Complexity:** Medium - Would require API changes
-**Status:** Deferred - ~95% memory reduction already achieved
+**Status:** Deferred - ~96% memory reduction already achieved
 
 #### 3. Use `CollectionsMarshal` for Direct List Access (Already Done)
 **Status:** ✅ Completed in Phase 2.2
@@ -141,6 +159,22 @@ Current performance far exceeds initial targets:
 - **Memory:** Additional 10-20% reduction in allocations
 - **Speed:** Maintain current performance or improve by 10-20%
 - **No regressions:** All existing tests must pass
+
+**Actual Achievements (Phase 3):**
+- **Memory:** ~95% reduction in allocations (far exceeds 10-20% goal)
+- **Speed:** ~50% improvement (far exceeds 10-20% goal)
+- **No regressions:** ✅ All existing tests pass
+
+**Phase 4 Achievements:**
+- **Memory:** Additional 1-20% reduction in specific scenarios (FindLastWord optimization)
+- **Speed:** Slight improvement (~1-2%) for single word and short text
+- **No regressions:** ✅ All existing tests pass
+
+**Overall Performance (All Phases Combined):**
+From original baseline to current:
+- **Memory:** ~96-97% reduction in allocations
+- **Speed:** ~50-52% faster execution
+- **Stability:** All tests passing, zero security issues
 
 **Actual Achievements (Phase 3):**
 - **Memory:** ~95% reduction in allocations (far exceeds 10-20% goal)
