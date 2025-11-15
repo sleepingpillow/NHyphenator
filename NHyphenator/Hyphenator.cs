@@ -126,24 +126,57 @@ namespace NHyphenator
                 }
             }
 
-            result.Append(HyphenateWord(currentWord.ToString()));
+            if (currentWord.Length > 0)
+            {
+                result.Append(HyphenateWord(currentWord.ToString()));
+            }
             return result;
         }
 
         private string FindLastWord(string phrase)
         {
-            var currentWord = new StringBuilder();
+            if (phrase.Length == 0)
+                return string.Empty;
+            
+            int lastLetterPos = -1;
+            
+            // Find the position of the last letter
             for (int i = phrase.Length - 1; i >= 0; i--)
             {
                 if (char.IsLetter(phrase[i]))
-                    currentWord.Append(phrase[i]);
-                else if (currentWord.Length > 0 && currentWord.ToString().Any(char.IsLetter))
-                    return new string(currentWord.ToString().Reverse().ToArray());
-                else
-                    currentWord.Append(phrase[i]);
+                {
+                    lastLetterPos = i;
+                    break;
+                }
             }
-
-            return string.Empty;
+            
+            if (lastLetterPos == -1)
+                return string.Empty;
+            
+            // Find the start of the word containing the last letter
+            int wordStart = lastLetterPos;
+            bool foundNonLetter = false;
+            for (int i = lastLetterPos - 1; i >= 0; i--)
+            {
+                if (char.IsLetter(phrase[i]))
+                {
+                    wordStart = i;
+                }
+                else
+                {
+                    // Found a non-letter before the word
+                    foundNonLetter = true;
+                    break;
+                }
+            }
+            
+            // If we didn't find a non-letter, this means the entire phrase is just one word
+            // In this case, return empty string (so the word gets hyphenated)
+            if (!foundNonLetter && wordStart == 0)
+                return string.Empty;
+            
+            // Return from wordStart to end of phrase (includes trailing punctuation)
+            return phrase.Substring(wordStart);
         }
 
         private string HyphenateWord(string originalWord)
