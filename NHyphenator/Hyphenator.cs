@@ -228,15 +228,34 @@ namespace NHyphenator
 
         private string HyphenateByMask(string originalWord, int[] hyphenationMask)
         {
-            var result = new StringBuilder();
-            for (int i = 0; i < originalWord.Length; i++)
+            // Count hyphen positions to calculate exact length needed
+            int hyphenCount = 0;
+            for (int i = 0; i < hyphenationMask.Length; i++)
             {
                 if (hyphenationMask[i] > 0)
-                    result.Append(_hyphenateSymbol);
-                result.Append(originalWord[i]);
+                    hyphenCount++;
             }
-
-            return result.ToString();
+            
+            if (hyphenCount == 0)
+                return originalWord; // No hyphens needed, return original
+            
+            // Use string.Create for zero-copy string building
+            int hyphenSymbolLength = _hyphenateSymbol.Length;
+            int resultLength = originalWord.Length + (hyphenCount * hyphenSymbolLength);
+            
+            return string.Create(resultLength, (originalWord, hyphenationMask, _hyphenateSymbol), (span, state) =>
+            {
+                int pos = 0;
+                for (int i = 0; i < state.originalWord.Length; i++)
+                {
+                    if (state.hyphenationMask[i] > 0)
+                    {
+                        state._hyphenateSymbol.AsSpan().CopyTo(span.Slice(pos));
+                        pos += state._hyphenateSymbol.Length;
+                    }
+                    span[pos++] = state.originalWord[i];
+                }
+            });
         }
 
         private int[] CreateHyphenateMaskFromExceptionString(string s)
