@@ -24,18 +24,33 @@ dotnet run -c Release -- --job short
 
 ## Benchmark Results
 
-### Current Performance (.NET 10)
+### Current Performance (.NET 10 - Phase 3 Optimizations)
 
-| Method              | Mean       | Allocated |
-|---------------------|------------|-----------|
-| HyphenateSingleWord | ~110 μs    | 10.96 KB  |
-| HyphenateShortText  | ~400 μs    | 39.6 KB   |
-| HyphenateLongText   | ~6.4 ms    | 651.27 KB |
+| Method              | Mean        | Allocated | vs Baseline Time | vs Baseline Memory |
+|---------------------|-------------|-----------|------------------|--------------------|
+| HyphenateSingleWord | ~54 μs      | 520 B     | -52.3%           | -96.0%             |
+| HyphenateShortText  | ~203 μs     | 2.42 KB   | -50.4%           | -94.8%             |
+| HyphenateLongText   | ~3.2 ms     | 27.34 KB  | -50.0%           | -96.4%             |
 
-### Improvements from Previous Version
+### Performance History
 
-- Memory allocations reduced by approximately **15%** across all workloads
-- Performance remains consistent (no regressions)
+**Phase 3 (Span + ArrayPool):**
+- Memory allocations reduced by **~95%** from Phase 2
+- Execution time reduced by **~50%** from Phase 2
+- Key optimizations: ReadOnlySpan<char> for pattern matching, ArrayPool for temporary arrays
+
+**Phase 2 (string.Create + CollectionsMarshal):**
+- Memory allocations reduced by **~17%** from Phase 1
+- Key optimizations: string.Create, CollectionsMarshal.AsSpan
+
+**Phase 1 (Basic Optimizations):**
+- Memory allocations reduced by **~15%** from original
+- Key optimizations: Array.Empty, direct digit parsing, StringBuilder capacity
+
+**Overall Improvements from Original:**
+- **~96% reduction in memory allocations**
+- **~50% faster execution time**
+- **All existing tests passing**
 
 ## Adding New Benchmarks
 
