@@ -183,7 +183,14 @@ namespace NHyphenator
 
         private int[] GenerateLevelsForWord(string word)
         {
-            string wordString = new StringBuilder().Append(Marker).Append(word).Append(Marker).ToString();
+            // Use string.Create to avoid StringBuilder allocation
+            string wordString = string.Create(word.Length + 2, word, (span, w) =>
+            {
+                span[0] = Marker;
+                w.AsSpan().CopyTo(span.Slice(1));
+                span[span.Length - 1] = Marker;
+            });
+            
             var levels = new int[wordString.Length];
             
             // Get direct access to the list's underlying array for faster access
