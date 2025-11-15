@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.RegularExpressions;
 using NHyphenator.Loaders;
@@ -184,24 +185,28 @@ namespace NHyphenator
         {
             string wordString = new StringBuilder().Append(Marker).Append(word).Append(Marker).ToString();
             var levels = new int[wordString.Length];
+            
+            // Get direct access to the list's underlying array for faster access
+            Span<Pattern> patternsSpan = CollectionsMarshal.AsSpan(_patterns);
+            
             for (int i = 0; i < wordString.Length - 2; ++i)
             {
                 int patternIndex = 0;
                 for (int count = 1; count <= wordString.Length - i; ++count)
                 {
                     var patternFromWord = new Pattern(wordString.Substring(i, count));
-                    if (Pattern.Compare(patternFromWord, _patterns[patternIndex]) < 0)
+                    if (Pattern.Compare(patternFromWord, patternsSpan[patternIndex]) < 0)
                         continue;
                     patternIndex = _patterns.FindIndex(patternIndex,
                         pattern => Pattern.Compare(pattern, patternFromWord) > 0);
                     if (patternIndex == -1)
                         break;
-                    if (Pattern.Compare(patternFromWord, _patterns[patternIndex]) >= 0)
+                    if (Pattern.Compare(patternFromWord, patternsSpan[patternIndex]) >= 0)
                         for (int levelIndex = 0;
-                            levelIndex < _patterns[patternIndex].GetLevelsCount() - 1;
+                            levelIndex < patternsSpan[patternIndex].GetLevelsCount() - 1;
                             ++levelIndex)
                         {
-                            int level = _patterns[patternIndex].GetLevelByIndex(levelIndex);
+                            int level = patternsSpan[patternIndex].GetLevelByIndex(levelIndex);
                             if (level > levels[i + levelIndex])
                                 levels[i + levelIndex] = level;
                         }
