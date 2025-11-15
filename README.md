@@ -5,6 +5,10 @@ Read more about algorithm on http://en.wikipedia.org/wiki/Hyphenation_algorithm
 
 This implementation contains original TEX hyphenation patterns (see http://tug.org/tex-hyphen/) for British and American English, and Russian language 
 
+## Requirements
+
+- .NET 10.0 or later
+
 ## NuGet
 
 https://www.nuget.org/packages/NHyphenator/
@@ -33,6 +37,16 @@ Also you can create own implementation of `IHyphenatePatternsLoader` interface
 
 You can find patterns [here](https://github.com/hyphenation/tex-hyphen/tree/master/hyph-utf8/tex/generic/hyph-utf8/patterns/txt):
 `.pat.txt` files contain patterns, `.hyp.txt` files contain exceptions
+
+## Performance
+
+The library has been optimized for .NET 10 with significant memory improvements:
+- ~15% reduction in memory allocations
+- Efficient use of modern .NET APIs
+
+For performance benchmarks and optimization plans, see:
+- [Benchmarks](NHyphenator.Benchmarks/README.md)
+- [Optimization Plan](OPTIMIZATION_PLAN.md)
 
 ## Licence
 

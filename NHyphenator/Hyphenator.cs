@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.RegularExpressions;
 using NHyphenator.Loaders;
@@ -182,26 +183,37 @@ namespace NHyphenator
 
         private int[] GenerateLevelsForWord(string word)
         {
-            string wordString = new StringBuilder().Append(Marker).Append(word).Append(Marker).ToString();
+            // Use string.Create to avoid StringBuilder allocation
+            string wordString = string.Create(word.Length + 2, word, (span, w) =>
+            {
+                span[0] = Marker;
+                w.AsSpan().CopyTo(span.Slice(1));
+                span[span.Length - 1] = Marker;
+            });
+            
             var levels = new int[wordString.Length];
+            
+            // Get direct access to the list's underlying array for faster access
+            Span<Pattern> patternsSpan = CollectionsMarshal.AsSpan(_patterns);
+            
             for (int i = 0; i < wordString.Length - 2; ++i)
             {
                 int patternIndex = 0;
                 for (int count = 1; count <= wordString.Length - i; ++count)
                 {
                     var patternFromWord = new Pattern(wordString.Substring(i, count));
-                    if (Pattern.Compare(patternFromWord, _patterns[patternIndex]) < 0)
+                    if (Pattern.Compare(patternFromWord, patternsSpan[patternIndex]) < 0)
                         continue;
                     patternIndex = _patterns.FindIndex(patternIndex,
                         pattern => Pattern.Compare(pattern, patternFromWord) > 0);
                     if (patternIndex == -1)
                         break;
-                    if (Pattern.Compare(patternFromWord, _patterns[patternIndex]) >= 0)
+                    if (Pattern.Compare(patternFromWord, patternsSpan[patternIndex]) >= 0)
                         for (int levelIndex = 0;
-                            levelIndex < _patterns[patternIndex].GetLevelsCount() - 1;
+                            levelIndex < patternsSpan[patternIndex].GetLevelsCount() - 1;
                             ++levelIndex)
                         {
-                            int level = _patterns[patternIndex].GetLevelByIndex(levelIndex);
+                            int level = patternsSpan[patternIndex].GetLevelByIndex(levelIndex);
                             if (level > levels[i + levelIndex])
                                 levels[i + levelIndex] = level;
                         }
@@ -228,15 +240,34 @@ namespace NHyphenator
 
         private string HyphenateByMask(string originalWord, int[] hyphenationMask)
         {
-            var result = new StringBuilder();
-            for (int i = 0; i < originalWord.Length; i++)
+            // Count hyphen positions to calculate exact length needed
+            int hyphenCount = 0;
+            for (int i = 0; i < hyphenationMask.Length; i++)
             {
                 if (hyphenationMask[i] > 0)
-                    result.Append(_hyphenateSymbol);
-                result.Append(originalWord[i]);
+                    hyphenCount++;
             }
-
-            return result.ToString();
+            
+            if (hyphenCount == 0)
+                return originalWord; // No hyphens needed, return original
+            
+            // Use string.Create for zero-copy string building
+            int hyphenSymbolLength = _hyphenateSymbol.Length;
+            int resultLength = originalWord.Length + (hyphenCount * hyphenSymbolLength);
+            
+            return string.Create(resultLength, (originalWord, hyphenationMask, _hyphenateSymbol), (span, state) =>
+            {
+                int pos = 0;
+                for (int i = 0; i < state.originalWord.Length; i++)
+                {
+                    if (state.hyphenationMask[i] > 0)
+                    {
+                        state._hyphenateSymbol.AsSpan().CopyTo(span.Slice(pos));
+                        pos += state._hyphenateSymbol.Length;
+                    }
+                    span[pos++] = state.originalWord[i];
+                }
+            });
         }
 
         private int[] CreateHyphenateMaskFromExceptionString(string s)
@@ -250,13 +281,13 @@ namespace NHyphenator
         private Pattern CreatePattern(string pattern)
         {
             var levels = new List<int>(pattern.Length);
-            var resultStr = new StringBuilder();
+            var resultStr = new StringBuilder(pattern.Length);
             bool waitDigit = true;
             foreach (char c in pattern)
             {
-                if (Char.IsDigit(c))
+                if (char.IsDigit(c))
                 {
-                    levels.Add(Int32.Parse(c.ToString(CultureInfo.InvariantCulture)));
+                    levels.Add(c - '0'); // Faster than Int32.Parse
                     waitDigit = false;
                 }
                 else
