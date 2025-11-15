@@ -15,21 +15,51 @@ This document outlines the optimization plan for NHyphenator using .NET 10's mem
 
 **Results:** ~15% reduction in memory allocations with no performance regression
 
+### ✅ Phase 2: Advanced Memory Optimizations
+
+#### ✅ Phase 2.1: Use `string.Create` for HyphenateByMask
+**Implementation:**
+- Replaced StringBuilder with `string.Create` for zero-copy string building
+- Added early return when no hyphens are needed
+- Uses tuple state to pass context into the lambda
+
+**Results:** 0.9-1.5% additional memory reduction
+
+#### ✅ Phase 2.2: Use `CollectionsMarshal` for Pattern List Access  
+**Implementation:**
+- Used `CollectionsMarshal.AsSpan` to get direct access to list's underlying array
+- Eliminates bounds checking in tight loops within GenerateLevelsForWord
+
+**Results:** Slight speed improvement, memory stable
+
+#### ✅ Phase 2.3: Optimize wordString Creation
+**Implementation:**
+- Replaced `StringBuilder().Append(Marker).Append(word).Append(Marker)` with `string.Create`
+- Eliminates StringBuilder allocation for marker+word+marker concatenation
+
+**Results:** 0.9-1.4% additional memory reduction
+
+**Phase 2 Cumulative Results:** ~17-18% total reduction from original baseline
+- Single word: 10.76 KB (was 13.02 KB)
+- Short text: 38.59 KB (was 46.56 KB)  
+- Long text: 632.19 KB (was 768.52 KB)
+
 ## Future Optimization Opportunities
 
-### Phase 2: Advanced Memory Optimizations (Not Implemented)
+### Phase 3: Additional Span<T> Optimizations (Not Yet Implemented)
 
-#### 1. Use `Span<T>` and `ReadOnlySpan<T>` for String Operations
-**Potential Benefits:** Reduce string allocations in hot paths
+#### 1. Use `Span<T>` and `ReadOnlySpan<T>` for More String Operations
+**Potential Benefits:** Further reduce string allocations in hot paths
 
 **Areas to consider:**
 - `HyphenateWordsInText`: Process text character-by-character using `ReadOnlySpan<char>`
-- `FindLastWord`: Use span slicing instead of Substring
-- `CreatePattern`: Use stackalloc for small buffers
+- `FindLastWord`: Use span slicing instead of Substring (partially done)
+- Pattern matching with spans
 
 **Complexity:** High - Requires careful refactoring to avoid breaking changes
+**Status:** Deferred - Current gains are sufficient, risk of bugs increases
 
-#### 2. Use `ArrayPool<T>` for Temporary Arrays
+#### 2. Use `ArrayPool<T>` for Temporary Arrays (Advanced)
 **Potential Benefits:** Reduce GC pressure from temporary array allocations
 
 **Areas to consider:**
