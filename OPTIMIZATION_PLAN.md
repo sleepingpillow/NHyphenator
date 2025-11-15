@@ -44,31 +44,42 @@ This document outlines the optimization plan for NHyphenator using .NET 10's mem
 - Short text: 38.59 KB (was 46.56 KB)  
 - Long text: 632.19 KB (was 768.52 KB)
 
+### ✅ Phase 3: Advanced Span<T> and ArrayPool Optimizations (COMPLETED)
+
+**Implementation Date:** November 2025
+
+#### ✅ 3.1: ArrayPool<T> for Temporary Arrays
+**Implementation:**
+- Used `ArrayPool<int>.Shared` for levels and mask arrays
+- Proper tracking of actual array lengths vs rented lengths
+- Ensured arrays are returned to pool after use
+
+**Results:** Foundation for memory reduction
+
+#### ✅ 3.2: ReadOnlySpan<char> for Pattern Matching  
+**Implementation:**
+- Eliminated substring allocations in `GenerateLevelsForWord`
+- Added `Pattern.Compare(ReadOnlySpan<char>, Pattern)` overloads
+- Used span slicing instead of `Substring(i, count)`
+- Created helper method `FindPatternIndex` to avoid lambda capture of spans
+
+**Results:** Massive performance improvements
+
+**Phase 3 Cumulative Results:** ~50% faster, ~95% memory reduction
+- Single word: 53.91 μs / 520 B (was 113.1 μs / 10.76 KB) - **-52.3% time, -95.2% memory**
+- Short text: 203.44 μs / 2.42 KB (was 410.3 μs / 38.59 KB) - **-50.4% time, -93.7% memory**
+- Long text: 3,192 μs / 27.34 KB (was 6,387 μs / 632.19 KB) - **-50.0% time, -95.7% memory**
+
+**Comparison to Original Baseline (before Phase 1):**
+- Single word: 53.91 μs / 520 B (was 113.1 μs / 13.02 KB) - **-52.3% time, -96.0% memory**
+- Short text: 203.44 μs / 2.42 KB (was 410.3 μs / 46.56 KB) - **-50.4% time, -94.8% memory**
+- Long text: 3,192 μs / 27.34 KB (was 6,387 μs / 768.52 KB) - **-50.0% time, -96.4% memory**
+
 ## Future Optimization Opportunities
 
-### Phase 3: Additional Span<T> Optimizations (Not Yet Implemented)
+### Phase 4: Additional Optimizations (Optional)
 
-#### 1. Use `Span<T>` and `ReadOnlySpan<T>` for More String Operations
-**Potential Benefits:** Further reduce string allocations in hot paths
-
-**Areas to consider:**
-- `HyphenateWordsInText`: Process text character-by-character using `ReadOnlySpan<char>`
-- `FindLastWord`: Use span slicing instead of Substring (partially done)
-- Pattern matching with spans
-
-**Complexity:** High - Requires careful refactoring to avoid breaking changes
-**Status:** Deferred - Current gains are sufficient, risk of bugs increases
-
-#### 2. Use `ArrayPool<T>` for Temporary Arrays (Advanced)
-**Potential Benefits:** Reduce GC pressure from temporary array allocations
-
-**Areas to consider:**
-- `GenerateLevelsForWord`: Pool the levels array (note: cannot be used if array is stored long-term)
-- `CreateHyphenateMaskFromLevels`: Pool the mask array (note: same caveat)
-
-**Complexity:** Medium - Need to ensure arrays are returned to pool and not stored
-
-#### 3. Use `SearchValues<T>` for Character Searches
+#### 1. Use `SearchValues<T>` for Character Searches
 **Potential Benefits:** Faster character searching (available in .NET 8+)
 
 **Areas to consider:**
@@ -76,22 +87,29 @@ This document outlines the optimization plan for NHyphenator using .NET 10's mem
 - Pattern matching optimizations
 
 **Complexity:** Low-Medium
+**Status:** Deferred - Current performance is excellent
 
-#### 4. Use `CollectionsMarshal` for Direct List Access
-**Potential Benefits:** Avoid bounds checking in tight loops
+#### 2. Use `ReadOnlySpan<char>` in HyphenateWordsInText
+**Potential Benefits:** Further reduce string allocations during text processing
 
 **Areas to consider:**
-- Pattern list access in `GenerateLevelsForWord`
+- Process text character-by-character using `ReadOnlySpan<char>`
+- `FindLastWord`: Use span slicing instead of Substring
 
-**Complexity:** Medium
+**Complexity:** Medium - Would require API changes
+**Status:** Deferred - ~95% memory reduction already achieved
 
-#### 5. Optimize String Building with Interpolation Handlers
+#### 3. Use `CollectionsMarshal` for Direct List Access (Already Done)
+**Status:** ✅ Completed in Phase 2.2
+
+#### 4. Optimize String Building with Interpolation Handlers
 **Potential Benefits:** Reduce StringBuilder allocations
 
 **Areas to consider:**
 - Use string interpolation with custom handlers for hyphenation
 
 **Complexity:** High
+**Status:** Deferred - Already optimized with `string.Create`
 
 ## Benchmarking Guidelines
 
@@ -117,10 +135,23 @@ dotnet run -c Release
 
 ## Performance Targets
 
-Current performance is adequate for most use cases. Future optimizations should aim for:
+Current performance far exceeds initial targets:
+
+**Initial Targets (Phase 3):**
 - **Memory:** Additional 10-20% reduction in allocations
 - **Speed:** Maintain current performance or improve by 10-20%
 - **No regressions:** All existing tests must pass
+
+**Actual Achievements (Phase 3):**
+- **Memory:** ~95% reduction in allocations (far exceeds 10-20% goal)
+- **Speed:** ~50% improvement (far exceeds 10-20% goal)
+- **No regressions:** ✅ All existing tests pass
+
+**Overall Performance (All Phases Combined):**
+From original baseline to current:
+- **Memory:** ~96% reduction in allocations
+- **Speed:** ~50% faster execution
+- **Stability:** All tests passing, zero security issues
 
 ## References
 

@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Buffers;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
@@ -152,28 +153,47 @@ namespace NHyphenator
 
             string word = originalWord.ToLowerInvariant();
             int[] hyphenationMask;
+            int maskLength;
+            bool isFromException;
+            
             if (_exceptions.ContainsKey(word))
+            {
                 hyphenationMask = _exceptions[word];
+                maskLength = hyphenationMask.Length;
+                isFromException = true;
+            }
             else
             {
-                int[] levels = GenerateLevelsForWord(word);
-                hyphenationMask = CreateHyphenateMaskFromLevels(levels);
-                CorrectMask(hyphenationMask);
+                int[] levels = GenerateLevelsForWord(word, out int levelsLength);
+                hyphenationMask = CreateHyphenateMaskFromLevels(levels, levelsLength, out maskLength);
+                CorrectMask(hyphenationMask, maskLength);
+                
+                // Return levels array to pool after we're done with it
+                ArrayPool<int>.Shared.Return(levels);
+                isFromException = false;
             }
 
-            return HyphenateByMask(originalWord, hyphenationMask);
+            string result = HyphenateByMask(originalWord, hyphenationMask, maskLength);
+            
+            // Return mask array to pool if it was allocated by us (not from exceptions)
+            if (!isFromException)
+            {
+                ArrayPool<int>.Shared.Return(hyphenationMask);
+            }
+            
+            return result;
         }
 
-        private void CorrectMask(int[] hyphenationMask)
+        private void CorrectMask(int[] hyphenationMask, int maskLength)
         {
-            if (hyphenationMask.Length > _minLetterCount)
+            if (maskLength > _minLetterCount)
             {
                 Array.Clear(hyphenationMask, 0, _minLetterCount);
                 var correctionLength = _minLetterCount > 0 ? _minLetterCount - 1 : 0;
-                Array.Clear(hyphenationMask, hyphenationMask.Length - correctionLength, correctionLength);
+                Array.Clear(hyphenationMask, maskLength - correctionLength, correctionLength);
             }
             else
-                Array.Clear(hyphenationMask, 0, hyphenationMask.Length);
+                Array.Clear(hyphenationMask, 0, maskLength);
         }
 
         private bool IsNotValidForHyphenate(string originalWord)
@@ -181,7 +201,7 @@ namespace NHyphenator
             return originalWord.Length <= _minWordLength;
         }
 
-        private int[] GenerateLevelsForWord(string word)
+        private int[] GenerateLevelsForWord(string word, out int levelsLength)
         {
             // Use string.Create to avoid StringBuilder allocation
             string wordString = string.Create(word.Length + 2, word, (span, w) =>
@@ -191,24 +211,32 @@ namespace NHyphenator
                 span[span.Length - 1] = Marker;
             });
             
-            var levels = new int[wordString.Length];
+            levelsLength = wordString.Length;
+            // Rent array from pool instead of allocating
+            int[] levels = ArrayPool<int>.Shared.Rent(levelsLength);
+            // Clear the rented array to ensure it starts with zeros
+            Array.Clear(levels, 0, levelsLength);
             
             // Get direct access to the list's underlying array for faster access
             Span<Pattern> patternsSpan = CollectionsMarshal.AsSpan(_patterns);
+            ReadOnlySpan<char> wordSpan = wordString.AsSpan();
             
             for (int i = 0; i < wordString.Length - 2; ++i)
             {
                 int patternIndex = 0;
                 for (int count = 1; count <= wordString.Length - i; ++count)
                 {
-                    var patternFromWord = new Pattern(wordString.Substring(i, count));
-                    if (Pattern.Compare(patternFromWord, patternsSpan[patternIndex]) < 0)
+                    // Use span slice instead of Substring to avoid allocations
+                    ReadOnlySpan<char> patternSlice = wordSpan.Slice(i, count);
+                    if (Pattern.Compare(patternSlice, patternsSpan[patternIndex]) < 0)
                         continue;
-                    patternIndex = _patterns.FindIndex(patternIndex,
-                        pattern => Pattern.Compare(pattern, patternFromWord) > 0);
+                    
+                    // FindIndex with span comparison - manual loop to avoid lambda capture
+                    patternIndex = FindPatternIndex(patternIndex, patternSlice);
+                    
                     if (patternIndex == -1)
                         break;
-                    if (Pattern.Compare(patternFromWord, patternsSpan[patternIndex]) >= 0)
+                    if (Pattern.Compare(patternSlice, patternsSpan[patternIndex]) >= 0)
                         for (int levelIndex = 0;
                             levelIndex < patternsSpan[patternIndex].GetLevelsCount() - 1;
                             ++levelIndex)
@@ -222,12 +250,26 @@ namespace NHyphenator
 
             return levels;
         }
-
-        private static int[] CreateHyphenateMaskFromLevels(int[] levels)
+        
+        private int FindPatternIndex(int startIndex, ReadOnlySpan<char> patternSlice)
         {
-            int length = levels.Length - 2;
-            var hyphenationMask = new int[length];
-            for (int i = 0; i < length; i++)
+            for (int i = startIndex; i < _patterns.Count; i++)
+            {
+                if (Pattern.Compare(_patterns[i], patternSlice) > 0)
+                    return i;
+            }
+            return -1;
+        }
+
+        private static int[] CreateHyphenateMaskFromLevels(int[] levels, int levelsLength, out int maskLength)
+        {
+            maskLength = levelsLength - 2;
+            // Rent array from pool instead of allocating
+            var hyphenationMask = ArrayPool<int>.Shared.Rent(maskLength);
+            // Clear the rented array to ensure correct initialization
+            Array.Clear(hyphenationMask, 0, maskLength);
+            
+            for (int i = 0; i < maskLength; i++)
             {
                 if (i != 0 && levels[i + 1] % 2 != 0)
                     hyphenationMask[i] = 1;
@@ -238,11 +280,11 @@ namespace NHyphenator
             return hyphenationMask;
         }
 
-        private string HyphenateByMask(string originalWord, int[] hyphenationMask)
+        private string HyphenateByMask(string originalWord, int[] hyphenationMask, int maskLength)
         {
             // Count hyphen positions to calculate exact length needed
             int hyphenCount = 0;
-            for (int i = 0; i < hyphenationMask.Length; i++)
+            for (int i = 0; i < maskLength; i++)
             {
                 if (hyphenationMask[i] > 0)
                     hyphenCount++;
@@ -255,12 +297,12 @@ namespace NHyphenator
             int hyphenSymbolLength = _hyphenateSymbol.Length;
             int resultLength = originalWord.Length + (hyphenCount * hyphenSymbolLength);
             
-            return string.Create(resultLength, (originalWord, hyphenationMask, _hyphenateSymbol), (span, state) =>
+            return string.Create(resultLength, (originalWord, hyphenationMask, _hyphenateSymbol, maskLength), (span, state) =>
             {
                 int pos = 0;
                 for (int i = 0; i < state.originalWord.Length; i++)
                 {
-                    if (state.hyphenationMask[i] > 0)
+                    if (i < state.maskLength && state.hyphenationMask[i] > 0)
                     {
                         state._hyphenateSymbol.AsSpan().CopyTo(span.Slice(pos));
                         pos += state._hyphenateSymbol.Length;

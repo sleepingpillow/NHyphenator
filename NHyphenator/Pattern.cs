@@ -45,6 +45,36 @@ namespace NHyphenator
 			}
 			return first ? -1 : 1;
 		}
+		
+		// Optimized comparison that avoids creating temporary Pattern objects
+		public static int Compare(ReadOnlySpan<char> span, Pattern pattern)
+		{
+			bool spanIsSmaller = span.Length < pattern.str.Length;
+			int minSize = spanIsSmaller ? span.Length : pattern.str.Length;
+			for (var i = 0; i < minSize; ++i)
+			{
+				if (span[i] < pattern.str[i])
+					return -1;
+				if (span[i] > pattern.str[i])
+					return 1;
+			}
+			return spanIsSmaller ? -1 : 1;
+		}
+		
+		// Optimized comparison that avoids creating temporary Pattern objects (reversed order)
+		public static int Compare(Pattern pattern, ReadOnlySpan<char> span)
+		{
+			bool patternIsSmaller = pattern.str.Length < span.Length;
+			int minSize = patternIsSmaller ? pattern.str.Length : span.Length;
+			for (var i = 0; i < minSize; ++i)
+			{
+				if (pattern.str[i] < span[i])
+					return -1;
+				if (pattern.str[i] > span[i])
+					return 1;
+			}
+			return patternIsSmaller ? -1 : 1;
+		}
 
 		int IComparer<Pattern>.Compare(Pattern x, Pattern y)
 		{
