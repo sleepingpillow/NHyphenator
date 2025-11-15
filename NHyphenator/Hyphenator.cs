@@ -219,20 +219,24 @@ namespace NHyphenator
             
             // Get direct access to the list's underlying array for faster access
             Span<Pattern> patternsSpan = CollectionsMarshal.AsSpan(_patterns);
+            ReadOnlySpan<char> wordSpan = wordString.AsSpan();
             
             for (int i = 0; i < wordString.Length - 2; ++i)
             {
                 int patternIndex = 0;
                 for (int count = 1; count <= wordString.Length - i; ++count)
                 {
-                    var patternFromWord = new Pattern(wordString.Substring(i, count));
-                    if (Pattern.Compare(patternFromWord, patternsSpan[patternIndex]) < 0)
+                    // Use span slice instead of Substring to avoid allocations
+                    ReadOnlySpan<char> patternSlice = wordSpan.Slice(i, count);
+                    if (Pattern.Compare(patternSlice, patternsSpan[patternIndex]) < 0)
                         continue;
-                    patternIndex = _patterns.FindIndex(patternIndex,
-                        pattern => Pattern.Compare(pattern, patternFromWord) > 0);
+                    
+                    // FindIndex with span comparison - manual loop to avoid lambda capture
+                    patternIndex = FindPatternIndex(patternIndex, patternSlice);
+                    
                     if (patternIndex == -1)
                         break;
-                    if (Pattern.Compare(patternFromWord, patternsSpan[patternIndex]) >= 0)
+                    if (Pattern.Compare(patternSlice, patternsSpan[patternIndex]) >= 0)
                         for (int levelIndex = 0;
                             levelIndex < patternsSpan[patternIndex].GetLevelsCount() - 1;
                             ++levelIndex)
@@ -245,6 +249,16 @@ namespace NHyphenator
             }
 
             return levels;
+        }
+        
+        private int FindPatternIndex(int startIndex, ReadOnlySpan<char> patternSlice)
+        {
+            for (int i = startIndex; i < _patterns.Count; i++)
+            {
+                if (Pattern.Compare(_patterns[i], patternSlice) > 0)
+                    return i;
+            }
+            return -1;
         }
 
         private static int[] CreateHyphenateMaskFromLevels(int[] levels, int levelsLength, out int maskLength)
