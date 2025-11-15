@@ -126,7 +126,10 @@ namespace NHyphenator
                 }
             }
 
-            result.Append(HyphenateWord(currentWord.ToString()));
+            if (currentWord.Length > 0)
+            {
+                result.Append(HyphenateWord(currentWord.ToString()));
+            }
             return result;
         }
 
