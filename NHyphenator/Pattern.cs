@@ -29,7 +29,7 @@ namespace NHyphenator
 		public Pattern(string str)
 		{
 			this.str = str;
-			levels = new int[0];
+			levels = Array.Empty<int>();
 		}
 
 		public static int Compare(Pattern x, Pattern y)

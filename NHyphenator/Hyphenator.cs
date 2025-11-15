@@ -250,13 +250,13 @@ namespace NHyphenator
         private Pattern CreatePattern(string pattern)
         {
             var levels = new List<int>(pattern.Length);
-            var resultStr = new StringBuilder();
+            var resultStr = new StringBuilder(pattern.Length);
             bool waitDigit = true;
             foreach (char c in pattern)
             {
-                if (Char.IsDigit(c))
+                if (char.IsDigit(c))
                 {
-                    levels.Add(Int32.Parse(c.ToString(CultureInfo.InvariantCulture)));
+                    levels.Add(c - '0'); // Faster than Int32.Parse
                     waitDigit = false;
                 }
                 else
